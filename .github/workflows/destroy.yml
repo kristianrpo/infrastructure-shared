@@ -1,0 +1,63 @@
+name: Destroy Shared Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type EXACTLY: DESTROY SHARED to confirm'
+        required: true
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  TF_BACKEND_BUCKET: ${{ secrets.TF_BACKEND_BUCKET }}
+  TF_BACKEND_KEY: shared/terraform.tfstate
+  TF_BACKEND_REGION: ${{ secrets.AWS_REGION }}
+  TF_BACKEND_DDB_TABLE: ${{ secrets.TF_BACKEND_DDB_TABLE }}
+
+jobs:
+  destroy-shared:
+    name: Destroy Shared Infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm destruction
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DESTROY SHARED" ]; then
+            echo "Confirmation failed. You must type EXACTLY: DESTROY SHARED"
+            exit 1
+          fi
+          echo "Confirmation OK"
+
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=$TF_BACKEND_BUCKET" \
+            -backend-config="key=$TF_BACKEND_KEY" \
+            -backend-config="region=$TF_BACKEND_REGION" \
+            -backend-config="dynamodb_table=$TF_BACKEND_DDB_TABLE"
+
+      - name: Terraform Destroy
+        working-directory: terraform
+        run: terraform destroy -auto-approve
+
+      - name: Done
+        run: |
+          echo "Shared infrastructure destroyed"
+          echo "Remember: All microservices depending on this will fail!"
