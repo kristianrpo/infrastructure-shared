@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "project" {
   description = "citizen folder project"
   type        = string
-  default     = "advance-architecture"
+  default     = "citizen"
 }
 
 variable "environment" {
