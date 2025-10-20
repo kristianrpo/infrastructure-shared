@@ -249,7 +249,40 @@ module "irsa_aws_load_balancer_controller" {
 }
 
 # ═══════════════════════════════════════════════════════════════
-#  IRSA: EXTERNAL SECRETS OPERATOR (Base)
+#  IAM POLICY: EXTERNAL SECRETS OPERATOR (Base)
+# ═══════════════════════════════════════════════════════════════
+resource "aws_iam_policy" "external_secrets_base" {
+  name_prefix = "${local.name}-eso-base-"
+  description = "Base policy for External Secrets Operator to read Secrets Manager"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${local.name}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:ListSecrets"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${local.name}-eso-base-policy"
+  }
+}
+
+# ═══════════════════════════════════════════════════════════════
+#  IRSA: EXTERNAL SECRETS OPERATOR
 # ═══════════════════════════════════════════════════════════════
 module "irsa_external_secrets" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
@@ -264,8 +297,9 @@ module "irsa_external_secrets" {
     }
   }
 
-  # Las políticas específicas se agregan desde cada servicio
-  role_policy_arns = {}
+  role_policy_arns = {
+    base = aws_iam_policy.external_secrets_base.arn
+  }
 
   tags = {
     Name = "${local.name}-eso-role"

@@ -57,14 +57,24 @@ output "rabbitmq_host" {
   value       = replace(replace(aws_mq_broker.rabbitmq.instances[0].endpoints[0], "amqps://", ""), "amqp://", "")
 }
 
-# IAM Roles compartidos
+# IAM Roles compartidos - Nombres compatibles con microservicios
 output "aws_lb_controller_role_arn" {
   description = "IAM role ARN for AWS Load Balancer Controller"
   value       = module.irsa_aws_load_balancer_controller.iam_role_arn
 }
 
+output "aws_load_balancer_controller_irsa_role_arn" {
+  description = "IAM role ARN for AWS Load Balancer Controller (alias)"
+  value       = module.irsa_aws_load_balancer_controller.iam_role_arn
+}
+
 output "eso_irsa_role_arn" {
   description = "IAM role ARN for External Secrets Operator"
+  value       = module.irsa_external_secrets.iam_role_arn
+}
+
+output "external_secrets_irsa_role_arn" {
+  description = "IAM role ARN for External Secrets Operator (alias)"
   value       = module.irsa_external_secrets.iam_role_arn
 }
 
