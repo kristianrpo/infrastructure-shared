@@ -31,7 +31,7 @@ variable "eks_version" {
 variable "eks_node_instance_types" {
   description = "Instance types for EKS nodes"
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.micro"]
 }
 
 variable "eks_node_min_size" {
