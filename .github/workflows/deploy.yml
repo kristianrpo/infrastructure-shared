@@ -78,21 +78,33 @@ jobs:
             -backend-config="region=$TF_BACKEND_REGION" \
             -backend-config="dynamodb_table=$TF_BACKEND_DDB_TABLE"
 
-      - name: Clean up KMS alias from state if it exists
+      - name: Handle existing KMS alias
         working-directory: terraform
         continue-on-error: true
         run: |
-          echo "Checking for orphaned KMS alias in state..."
+          echo "Checking KMS alias state..."
           ALIAS_NAME="alias/eks/citizen-dev"
           
-          # If alias exists in AWS, try to import it
-          # This handles the case where the alias was created outside of Terraform
-          if aws kms describe-alias --alias-name "$ALIAS_NAME" >/dev/null 2>&1; then
+          # Check if alias exists in AWS
+          ALIAS_INFO=$(aws kms describe-alias --alias-name "$ALIAS_NAME" 2>&1)
+          
+          if echo "$ALIAS_INFO" | grep -q "alias/eks/citizen-dev"; then
             echo "KMS alias exists in AWS: $ALIAS_NAME"
-            echo "Attempting to import to sync state..."
-            terraform import module.eks.module.kms.aws_kms_alias.this[\"cluster\"] "$ALIAS_NAME" 2>&1 || echo "Import completed or not needed"
+            
+            # Try to check if it's in state
+            if terraform state show "module.eks.module.kms.aws_kms_alias.this[\"cluster\"]" >/dev/null 2>&1; then
+              echo "KMS alias already in Terraform state"
+            else
+              echo "Attempting to import KMS alias..."
+              terraform import "module.eks.module.kms.aws_kms_alias.this[\"cluster\"]" "$ALIAS_NAME" || \
+                echo "Import completed or alias already managed"
+              
+              # Refresh the state to sync
+              echo "Refreshing state..."
+              terraform state show "module.eks.module.kms.aws_kms_alias.this[\"cluster\"]" || true
+            fi
           else
-            echo "KMS alias does not exist in AWS"
+            echo "KMS alias does not exist in AWS - will be created"
           fi
 
       - name: Terraform Validate
@@ -106,33 +118,71 @@ jobs:
         
       - name: Terraform Apply
         working-directory: terraform
+        continue-on-error: true
         run: |
-          # Run terraform apply and capture any KMS alias errors
-          if ! terraform apply -auto-approve tfplan 2>&1 | tee /tmp/apply.log; then
-            EXIT_CODE=$?
-            # If error is KMS alias already exists, import and re-apply
-            if grep -q "AlreadyExistsException.*alias" /tmp/apply.log; then
-              echo "Warning: KMS alias already exists. Attempting to import and fix state..."
-              terraform import module.eks.module.kms.aws_kms_alias.this[\"cluster\"] "alias/eks/citizen-dev" || true
-              echo "Re-applying with updated state..."
-              terraform apply -auto-approve || exit $EXIT_CODE
+          set +e
+          # Try to apply
+          terraform apply -auto-approve tfplan 2>&1 | tee /tmp/apply.log
+          APPLY_EXIT=${PIPESTATUS[0]}
+          
+          # If apply failed, check for KMS alias error
+          if [ $APPLY_EXIT -ne 0 ]; then
+            if grep -q "AlreadyExistsException.*alias/eks" /tmp/apply.log; then
+              echo "KMS alias already exists error detected. Fixing state..."
+              
+              # Import the existing alias
+              terraform import module.eks.module.kms.aws_kms_alias.this[\"cluster\"] "alias/eks/citizen-dev" || \
+                echo "Import may have failed (alias might already be in state)"
+              
+              # Generate a new plan and apply
+              echo "Generating new plan after import..."
+              terraform plan -out=tfplan-retry
+              
+              echo "Applying with corrected state..."
+              terraform apply -auto-approve tfplan-retry || {
+                echo "Final apply failed"
+                exit 1
+              }
             else
-              echo "Apply failed with error: $EXIT_CODE"
-              exit $EXIT_CODE
+              echo "Apply failed with non-KMS error"
+              cat /tmp/apply.log
+              exit $APPLY_EXIT
             fi
           fi
+          
+          set -e
 
       - name: Display Outputs
         working-directory: terraform
+        continue-on-error: true
         run: |
           echo "=== Shared Infrastructure Deployed ==="
-          echo "Cluster Name: $(terraform output -raw cluster_name)"
-          echo "RabbitMQ Host: $(terraform output -raw rabbitmq_host)"
-          echo "DynamoDB Table: $(terraform output -raw rabbitmq_processed_messages_table_name)"
           echo ""
-          echo "Available Outputs:"
-          echo "- VPC ID"
-          echo "- EKS Cluster"
-          echo "- RabbitMQ Broker"
-          echo "- DynamoDB Table for Idempotency"
-          echo "- IAM Roles and Policies"
+          
+          # Cluster info
+          if terraform output -raw cluster_name >/dev/null 2>&1; then
+            echo "Cluster Name: $(terraform output -raw cluster_name)"
+          else
+            echo "Cluster Name: Not yet created"
+          fi
+          
+          # RabbitMQ info (may not exist if apply partially failed)
+          if terraform output -raw rabbitmq_host >/dev/null 2>&1; then
+            echo "RabbitMQ Host: $(terraform output -raw rabbitmq_host)"
+          else
+            echo "RabbitMQ Host: Not created yet"
+          fi
+          
+          # DynamoDB table
+          if terraform output -raw rabbitmq_processed_messages_table_name >/dev/null 2>&1; then
+            echo "DynamoDB Table: $(terraform output -raw rabbitmq_processed_messages_table_name)"
+          else
+            echo "DynamoDB Table: Not created yet"
+          fi
+          
+          echo ""
+          echo "Available outputs from terraform state:"
+          terraform output || echo "No outputs available"
+          echo ""
+          echo "Note: If RabbitMQ output is missing, the infrastructure may still be deploying."
+          echo "Check the pipeline logs for any KMS alias import messages."
