@@ -82,9 +82,26 @@ jobs:
         working-directory: terraform
         run: terraform validate
 
+
       - name: Terraform Plan
         working-directory: terraform
         run: terraform plan -out=tfplan
+        
+      - name: Import KMS alias if exists
+        working-directory: terraform
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          alias_name="alias/eks/citizen-dev"
+          tf_resource='module.eks.module.kms.aws_kms_alias.this["cluster"]'
+          # Verifica si el alias existe en AWS
+          if aws kms list-aliases --region "$AWS_REGION" --query "Aliases[?AliasName=='$alias_name']" --output json | grep -q "$alias_name"; then
+            # Si no está en el state, lo importa
+            if ! terraform state list | grep -q "$tf_resource"; then
+              echo "Importando alias existente a Terraform state..."
+              terraform import "$tf_resource" "$alias_name" || true
+            fi
+          fi
 
       - name: Terraform Apply
         working-directory: terraform
