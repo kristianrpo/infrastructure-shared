@@ -77,9 +77,32 @@ jobs:
         working-directory: terraform
         run: terraform destroy -auto-approve
 
-      - name: Delete S3 backend bucket (with all objects)
+      - name: Delete S3 backend bucket (with all objects and versions)
         run: |
-          aws s3 rm "s3://$TF_BACKEND_BUCKET" --recursive || true
+          echo "Deleting all objects and versions from S3 bucket: $TF_BACKEND_BUCKET"
+          
+          # Delete all object versions (for versioned buckets)
+          aws s3api list-object-versions \
+            --bucket "$TF_BACKEND_BUCKET" \
+            --output json > /tmp/versions.json || echo "No objects to delete"
+          
+          # Delete all versions and delete markers
+          if [ -f /tmp/versions.json ]; then
+            cat /tmp/versions.json | jq -r '.Versions[]? | "\(.Key)|\(.VersionId)"' | while read line; do
+              KEY=$(echo "$line" | cut -d'|' -f1)
+              VERSION=$(echo "$line" | cut -d'|' -f2)
+              aws s3api delete-object --bucket "$TF_BACKEND_BUCKET" --key "$KEY" --version-id "$VERSION" 2>/dev/null || true
+            done
+            
+            # Delete delete markers
+            cat /tmp/versions.json | jq -r '.DeleteMarkers[]? | "\(.Key)|\(.VersionId)"' | while read line; do
+              KEY=$(echo "$line" | cut -d'|' -f1)
+              VERSION=$(echo "$line" | cut -d'|' -f2)
+              aws s3api delete-object --bucket "$TF_BACKEND_BUCKET" --key "$KEY" --version-id "$VERSION" 2>/dev/null || true
+            done
+          fi
+          
+          echo "Deleting bucket: $TF_BACKEND_BUCKET"
           aws s3api delete-bucket --bucket "$TF_BACKEND_BUCKET" --region "$TF_BACKEND_REGION" || true
 
       - name: Delete DynamoDB lock table
