@@ -31,7 +31,7 @@ resource "helm_release" "aws_load_balancer_controller" {
   # Esperar a que el deployment esté listo antes de continuar
   wait          = true
   wait_for_jobs = true
-  timeout       = 600
+  timeout       = 900
 
   depends_on = [
     module.irsa_aws_load_balancer_controller,
@@ -74,9 +74,10 @@ resource "helm_release" "external_secrets" {
   }
 
   # Esperar a que el deployment esté listo antes de continuar
+  # Increased timeout to 15 minutes for slow EKS deployments
   wait          = true
   wait_for_jobs = true
-  timeout       = 600
+  timeout       = 900
 
   depends_on = [
     module.irsa_external_secrets,
