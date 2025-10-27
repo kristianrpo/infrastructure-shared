@@ -31,7 +31,7 @@ variable "eks_version" {
 variable "eks_node_instance_types" {
   description = "Instance types for EKS nodes"
   type        = list(string)
-  default     = ["t3.micro"]
+  default     = ["t3.small"]
 }
 
 variable "eks_node_min_size" {
@@ -49,7 +49,7 @@ variable "eks_node_max_size" {
 variable "eks_node_desired_size" {
   description = "Desired number of nodes in EKS node group"
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "rabbitmq_instance_type" {
