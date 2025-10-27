@@ -53,6 +53,25 @@ jobs:
             -backend-config="region=$TF_BACKEND_REGION" \
             -backend-config="dynamodb_table=$TF_BACKEND_DDB_TABLE"
 
+      - name: Get DynamoDB Table Name
+        working-directory: terraform
+        id: get_table
+        run: |
+          TABLE_NAME=$(terraform output -raw rabbitmq_processed_messages_table_name 2>/dev/null || echo "")
+          echo "TABLE_NAME=$TABLE_NAME" >> $GITHUB_ENV
+
+      - name: Disable PITR before Destroy
+        if: env.TABLE_NAME != ''
+        run: |
+          echo "Disabling Point-in-time Recovery for DynamoDB table: $TABLE_NAME"
+          aws dynamodb update-continuous-backups \
+            --table-name "$TABLE_NAME" \
+            --point-in-time-recovery-specification PointInTimeRecoveryEnabled=false \
+            --region ${{ secrets.AWS_REGION }} || echo "Could not disable PITR (table might not exist or already disabled)"
+          
+          # Wait a moment for the change to propagate
+          sleep 2
+
       - name: Terraform Destroy
         working-directory: terraform
         run: terraform destroy -auto-approve

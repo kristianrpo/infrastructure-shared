@@ -195,6 +195,85 @@ resource "aws_mq_broker" "rabbitmq" {
 
   depends_on = [
     aws_security_group.rabbitmq,
-    aws_security_group_rule.rabbitmq_from_eks_nodes
+    aws_security_group_rule.rabbitmq_from_eks_nodes,
+    module.eks  # Asegurar que EKS existe antes de crear RabbitMQ
   ]
+}
+
+# ═══════════════════════════════════════════════════════════════
+#  DYNAMODB: TABLA DE MENSAJES PROCESADOS (Idempotencia RabbitMQ)
+# ═══════════════════════════════════════════════════════════════
+# 
+# Esta tabla almacena los mensajes de RabbitMQ que ya fueron procesados
+# para evitar que se procesen duplicados (idempotencia).
+#
+# IMPORTANTE: Esta tabla se crea automáticamente en la infraestructura
+# compartida. El código Go del consumidor NO debe ejecutar EnsureTableExists()
+# ya que la tabla ya existe. Solo debe verificar/insertar registros.
+#
+# Estructura (coincide con el código Go del consumidor):
+# - MessageID (PK): ID único del mensaje (tipo String)
+# - processed_at: Timestamp de cuándo se procesó
+# - ttl: Tiempo de expiración para limpieza automática
+#
+# Para usar esta tabla en tu microservicio consumidor:
+# 1. Crea un IRSA role en tu terraform del microservicio
+# 2. Asocia la policy: rabbitmq_consumer_dynamodb_policy_arn
+# 3. Usa los outputs para obtener el nombre de la tabla
+# 4. Configura el nombre de la tabla como variable de entorno
+
+resource "aws_dynamodb_table" "rabbitmq_processed_messages" {
+  name         = "${local.name}-rabbitmq-processed-messages"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "MessageID"
+
+  attribute {
+    name = "MessageID"
+    type = "S"
+  }
+
+  # TTL para limpiar mensajes antiguos automáticamente (14 días)
+  ttl {
+    enabled        = true
+    attribute_name  = "ttl"
+  }
+
+  # Point-in-time recovery para prevenir pérdida de datos
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "${local.name}-rabbitmq-processed-messages"
+    Environment = var.environment
+    Purpose     = "RabbitMQ message idempotency tracking"
+  }
+}
+
+
+resource "aws_iam_policy" "rabbitmq_consumer_dynamodb" {
+  name_prefix = "${local.name}-rabbitmq-consumer-dynamodb-"
+  description = "IAM policy for RabbitMQ consumers to access DynamoDB for idempotency"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:GetItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:Query"
+        ]
+        Resource = [
+          aws_dynamodb_table.rabbitmq_processed_messages.arn
+        ]
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${local.name}-rabbitmq-consumer-dynamodb-policy"
+  }
 }
