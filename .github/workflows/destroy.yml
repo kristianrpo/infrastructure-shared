@@ -72,6 +72,29 @@ jobs:
           # Wait a moment for the change to propagate
           sleep 2
 
+      - name: Delete Grafana Ingress (to remove ALB before VPC)
+        run: |
+          echo "Deleting Grafana Ingress to remove ALB before destroying VPC..."
+          
+          # Configure kubectl
+          CLUSTER_NAME=$(cd terraform && terraform output -raw cluster_name 2>/dev/null || echo "")
+          if [ -z "$CLUSTER_NAME" ]; then
+            echo "No cluster found, skipping ingress deletion"
+            exit 0
+          fi
+          
+          # Update kubeconfig
+          aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name $CLUSTER_NAME || {
+            echo "Could not connect to cluster, skipping ingress deletion"
+            exit 0
+          }
+          
+          # Delete Grafana Ingress if exists
+          kubectl delete ingress grafana-ingress -n monitoring 2>/dev/null || echo "Grafana Ingress not found"
+          
+          # Wait for ALB to start deleting
+          echo "Waiting for ALB deletion..."
+          sleep 30
 
       - name: Terraform Destroy
         working-directory: terraform

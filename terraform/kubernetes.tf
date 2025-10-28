@@ -154,7 +154,7 @@ resource "helm_release" "kube_prometheus_stack" {
 
   set {
     name  = "prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName"
-    value = "gp2"
+    value = "gp3"  # Usar gp3 (más barato) con EBS CSI Driver
   }
 
   set {
@@ -165,7 +165,7 @@ resource "helm_release" "kube_prometheus_stack" {
   # Configuración de storage para Alertmanager (opcional, evitar warnings)
   set {
     name  = "alertmanager.alertmanagerSpec.storage.volumeClaimTemplate.spec.storageClassName"
-    value = "gp2"
+    value = "gp3"  # Usar gp3 con EBS CSI Driver
   }
 
   # Habilitar scraping de todos los namespaces

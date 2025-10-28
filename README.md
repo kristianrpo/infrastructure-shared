@@ -107,8 +107,10 @@ Configurar en Settings → Secrets and variables → Actions:
 
 ### Storage Configuration
 
-El stack de Prometheus/Grafana está configurado para usar el StorageClass `gp2` de AWS EBS. 
-Esto evita problemas de provisioning de PVCs en instalaciones futuras.
+El stack de Prometheus/Grafana está configurado para usar el StorageClass `gp3` de AWS EBS 
+con el EBS CSI Driver. Esto permite el provisioning dinámico de volúmenes EBS.
+
+**Costo**: ~$1.60/mes por 20 GB (gp3 es más barato que gp2).
 
 ### Acceso a Grafana
 
