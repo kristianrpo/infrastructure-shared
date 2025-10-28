@@ -60,17 +60,20 @@ jobs:
         run: |
           echo "Handling potential corrupted state from partial destruction..."
           
-          # Try to get a plan to see what Terraform thinks exists
-          terraform plan -destroy -out=tfplan-test 2>&1 | tee /tmp/destroy-plan.log || true
-          
-          # If plan shows resources that don't exist, we need to remove them from state
           # Check if cluster still exists
           CLUSTER_EXISTS=$(aws eks describe-cluster --name citizen-dev --region ${{ secrets.AWS_REGION }} 2>/dev/null || echo "not-found")
           
           if [ "$CLUSTER_EXISTS" = "not-found" ]; then
-            echo "Cluster doesn't exist but Terraform state has it. Removing from state..."
-            # Remove cluster and its resources from state
-            terraform state rm module.eks 2>/dev/null || echo "Could not remove module.eks from state"
+            echo "Cluster doesn't exist but Terraform state has it."
+            echo "Removing EKS-related resources from state to allow destroy..."
+            
+            # Try to remove specific problematic resources first
+            terraform state rm 'module.eks.aws_eks_addon.this["ebs-csi-driver"]' 2>/dev/null || echo "Could not remove ebs-csi-driver addon"
+            terraform state rm 'module.eks.data.aws_eks_addon_version.this["ebs-csi-driver"]' 2>/dev/null || echo "Could not remove addon version data"
+            
+            # If still problems, remove the entire EKS module
+            echo "Attempting to remove entire EKS module from state..."
+            terraform state rm module.eks 2>/dev/null || echo "Could not remove module.eks"
           fi
           
           echo "State cleanup attempted. Proceeding with destroy..."
