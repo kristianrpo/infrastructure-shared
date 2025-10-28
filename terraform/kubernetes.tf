@@ -157,6 +157,17 @@ resource "helm_release" "kube_prometheus_stack" {
     value = "gp2"
   }
 
+  set {
+    name  = "prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.accessModes[0]"
+    value = "ReadWriteOnce"
+  }
+
+  # Configuración de storage para Alertmanager (opcional, evitar warnings)
+  set {
+    name  = "alertmanager.alertmanagerSpec.storage.volumeClaimTemplate.spec.storageClassName"
+    value = "gp2"
+  }
+
   # Habilitar scraping de todos los namespaces
   set {
     name  = "prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues"

@@ -105,6 +105,11 @@ Configurar en Settings → Secrets and variables → Actions:
 
 ## 📊 Monitoreo
 
+### Storage Configuration
+
+El stack de Prometheus/Grafana está configurado para usar el StorageClass `gp2` de AWS EBS. 
+Esto evita problemas de provisioning de PVCs en instalaciones futuras.
+
 ### Acceso a Grafana
 
 El stack de monitoreo (Prometheus + Grafana) está desplegado en el namespace `monitoring`.
