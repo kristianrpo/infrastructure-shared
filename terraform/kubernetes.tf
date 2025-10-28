@@ -152,6 +152,11 @@ resource "helm_release" "kube_prometheus_stack" {
     value = "20Gi"
   }
 
+  set {
+    name  = "prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName"
+    value = "gp2"
+  }
+
   # Habilitar scraping de todos los namespaces
   set {
     name  = "prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues"
