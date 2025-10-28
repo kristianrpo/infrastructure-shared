@@ -97,13 +97,6 @@ resource "kubernetes_namespace" "monitoring" {
     }
   }
 
-  lifecycle {
-    ignore_changes = [
-      # Ignorar cambios en metadata.uid si el namespace ya existe
-      metadata[0].uid
-    ]
-  }
-
   depends_on = [module.eks]
 }
 
