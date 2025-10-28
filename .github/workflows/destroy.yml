@@ -56,9 +56,15 @@ jobs:
       - name: Get DynamoDB Table Name
         working-directory: terraform
         id: get_table
+        continue-on-error: true
         run: |
           TABLE_NAME=$(terraform output -raw rabbitmq_processed_messages_table_name 2>/dev/null || echo "")
-          echo "TABLE_NAME=$TABLE_NAME" >> $GITHUB_ENV
+          if [ -n "$TABLE_NAME" ]; then
+            echo "TABLE_NAME=$TABLE_NAME" >> $GITHUB_ENV
+          else
+            echo "No table found or already destroyed"
+            echo "TABLE_NAME=" >> $GITHUB_ENV
+          fi
 
       - name: Disable PITR before Destroy
         if: env.TABLE_NAME != ''
@@ -73,6 +79,7 @@ jobs:
           sleep 2
 
       - name: Delete Grafana Ingress (to remove ALB before VPC)
+        continue-on-error: true
         run: |
           echo "Deleting Grafana Ingress to remove ALB before destroying VPC..."
           
@@ -84,10 +91,10 @@ jobs:
           fi
           
           # Update kubeconfig
-          aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name $CLUSTER_NAME || {
+          if ! aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name "$CLUSTER_NAME" 2>/dev/null; then
             echo "Could not connect to cluster, skipping ingress deletion"
             exit 0
-          }
+          fi
           
           # Delete Grafana Ingress if exists
           kubectl delete ingress grafana-ingress -n monitoring 2>/dev/null || echo "Grafana Ingress not found"
