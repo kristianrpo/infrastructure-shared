@@ -132,3 +132,21 @@ output "api_gateway_execution_arn" {
   description = "API Gateway execution ARN (for IAM policies)"
   value       = aws_apigatewayv2_api.microservices_api.execution_arn
 }
+
+# ═══════════════════════════════════════════════════════════════
+#  MONITOREO (Prometheus & Grafana)
+# ═══════════════════════════════════════════════════════════════
+output "prometheus_stack_namespace" {
+  description = "Namespace donde está instalado el stack de Prometheus/Grafana"
+  value       = "monitoring"
+}
+
+output "prometheus_service_name" {
+  description = "Nombre del servicio de Prometheus"
+  value       = "kube-prometheus-stack-prometheus"
+}
+
+output "grafana_service_name" {
+  description = "Nombre del servicio de Grafana"
+  value       = "kube-prometheus-stack-grafana"
+}

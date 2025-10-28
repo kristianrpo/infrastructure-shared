@@ -85,3 +85,91 @@ resource "helm_release" "external_secrets" {
     time_sleep.wait_for_alb_controller
   ]
 }
+
+# ═══════════════════════════════════════════════════════════════
+#  PROMETHEUS & GRAFANA (Stack de monitoreo compartido)
+# ═══════════════════════════════════════════════════════════════
+resource "kubernetes_namespace" "monitoring" {
+  metadata {
+    name = "monitoring"
+    labels = {
+      name = "monitoring"
+    }
+  }
+
+  depends_on = [module.eks]
+}
+
+# kube-prometheus-stack (Prometheus + Grafana + AlertManager)
+resource "helm_release" "kube_prometheus_stack" {
+  name       = "kube-prometheus-stack"
+  repository = "https://prometheus-community.github.io/helm-charts"
+  chart      = "kube-prometheus-stack"
+  namespace  = kubernetes_namespace.monitoring.metadata[0].name
+  version    = "56.6.2"
+
+  # Configuración básica
+  set {
+    name  = "prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues"
+    value = "false"
+  }
+
+  # Grafana configuración
+  set {
+    name  = "grafana.service.type"
+    value = "ClusterIP"
+  }
+
+  set {
+    name  = "grafana.sidecar.dashboards.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "grafana.sidecar.dashboards.label"
+    value = "grafana_dashboard"
+  }
+
+  set {
+    name  = "grafana.sidecar.dashboards.searchNamespace"
+    value = "ALL"
+  }
+
+  # Configuración segura de contraseña
+  set_sensitive {
+    name  = "grafana.adminPassword"
+    value = "admin" # TODO: Cambiar a secret de Secrets Manager
+  }
+
+  # Configuración de Prometheus
+  set {
+    name  = "prometheus.prometheusSpec.retention"
+    value = "30d"
+  }
+
+  set {
+    name  = "prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage"
+    value = "20Gi"
+  }
+
+  # Habilitar scraping de todos los namespaces
+  set {
+    name  = "prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues"
+    value = "false"
+  }
+
+  # Timeout más largo para instalación
+  wait    = true
+  timeout = 600
+
+  depends_on = [
+    module.eks,
+    kubernetes_namespace.monitoring
+  ]
+}
+
+# Esperar a que Prometheus/Grafana estén operativos
+resource "time_sleep" "wait_for_prometheus_stack" {
+  depends_on      = [helm_release.kube_prometheus_stack]
+  create_duration = "60s"
+}

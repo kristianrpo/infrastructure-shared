@@ -9,6 +9,8 @@ Este repositorio provisiona:
 - ✅ EKS Cluster (Kubernetes)
 - ✅ RabbitMQ (broker compartido)
 - ✅ IAM Roles compartidos (ALB Controller, External Secrets Operator)
+- ✅ API Gateway (punto de entrada para microservicios)
+- ✅ Prometheus + Grafana (monitoreo centralizado)
 
 ## 📦 Terraform State
 
@@ -56,8 +58,16 @@ data "terraform_remote_state" "shared" {
 # Usar:
 # data.terraform_remote_state.shared.outputs.cluster_name
 # data.terraform_remote_state.shared.outputs.rabbitmq_amqp_url
+# data.terraform_remote_state.shared.outputs.api_gateway_invoke_url
 # etc.
 ```
+
+Principales outputs disponibles:
+- `cluster_name` - Nombre del cluster EKS
+- `rabbitmq_amqp_url` - URL de conexión a RabbitMQ (sensitive)
+- `api_gateway_invoke_url` - URL del API Gateway
+- `prometheus_stack_namespace` - Namespace de monitoreo
+- Ver `terraform/outputs.tf` para la lista completa
 
 ## 🗑️ Destrucción
 
@@ -92,3 +102,31 @@ Configurar en Settings → Secrets and variables → Actions:
 - `AWS_REGION`
 - `TF_BACKEND_BUCKET`
 - `TF_BACKEND_DDB_TABLE`
+
+## 📊 Monitoreo
+
+### Acceso a Grafana
+
+El stack de monitoreo (Prometheus + Grafana) está desplegado en el namespace `monitoring`.
+
+**Acceso local via port-forward:**
+```bash
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80
+# Abre http://localhost:3000
+# Usuario: admin / Contraseña: admin
+```
+
+**Acceso público (si el Ingress está habilitado):**
+```bash
+# Obtener URL del ALB
+kubectl get ingress -n monitoring grafana-ingress
+```
+
+### Configurar Microservicios para Monitoreo
+
+Ver [docs/MONITORING_SETUP.md](docs/MONITORING_SETUP.md) para instrucciones detalladas.
+
+Resumen:
+1. Crear `ServiceMonitor` en cada microservicio
+2. Crear ConfigMap con dashboard de Grafana
+3. Exponer métricas en `/metrics`
