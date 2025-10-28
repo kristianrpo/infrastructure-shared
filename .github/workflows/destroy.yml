@@ -51,7 +51,29 @@ jobs:
             -backend-config="bucket=$TF_BACKEND_BUCKET" \
             -backend-config="key=$TF_BACKEND_KEY" \
             -backend-config="region=$TF_BACKEND_REGION" \
-            -backend-config="dynamodb_table=$TF_BACKEND_DDB_TABLE"
+            -backend-config="dynamodb_table=$TF_BACKEND_DDB_TABLE" \
+            -reconfigure
+
+      - name: Handle corrupted state from partial destruction
+        working-directory: terraform
+        continue-on-error: true
+        run: |
+          echo "Handling potential corrupted state from partial destruction..."
+          
+          # Try to get a plan to see what Terraform thinks exists
+          terraform plan -destroy -out=tfplan-test 2>&1 | tee /tmp/destroy-plan.log || true
+          
+          # If plan shows resources that don't exist, we need to remove them from state
+          # Check if cluster still exists
+          CLUSTER_EXISTS=$(aws eks describe-cluster --name citizen-dev --region ${{ secrets.AWS_REGION }} 2>/dev/null || echo "not-found")
+          
+          if [ "$CLUSTER_EXISTS" = "not-found" ]; then
+            echo "Cluster doesn't exist but Terraform state has it. Removing from state..."
+            # Remove cluster and its resources from state
+            terraform state rm module.eks 2>/dev/null || echo "Could not remove module.eks from state"
+          fi
+          
+          echo "State cleanup attempted. Proceeding with destroy..."
 
       - name: Get DynamoDB Table Name
         working-directory: terraform
@@ -103,39 +125,37 @@ jobs:
           echo "Waiting for ALB deletion..."
           sleep 30
 
-      - name: Terraform Destroy (with lock handling)
+      - name: Terraform Destroy (with error handling)
         working-directory: terraform
         run: |
           # Try normal destroy first
           set +e
-          terraform destroy -auto-approve
-          DESTROY_EXIT=$?
+          terraform destroy -auto-approve 2>&1 | tee /tmp/destroy.log
+          DESTROY_EXIT=${PIPESTATUS[0]}
           set -e
           
-          # If failed due to lock, unlock and retry
+          # If failed, check the reason
           if [ $DESTROY_EXIT -ne 0 ]; then
-            echo "Destroy failed (exit code: $DESTROY_EXIT). Checking for stale locks..."
+            echo "Destroy failed (exit code: $DESTROY_EXIT)"
             
-            # Parse the lock ID from the error output (if any)
-            # Lock IDs are in format: ae44d301-8bd4-7bf2-d02b-fc393c883721
-            # We'll try to find and unlock any stale lock
-            
-            # Extract lock ID from error (common pattern)
-            LOCK_OUTPUT=$(terraform destroy -auto-approve 2>&1 || true)
-            
-            # Try to find lock ID in the output
-            LOCK_ID=$(echo "$LOCK_OUTPUT" | grep -E "ID:\s+[a-f0-9-]{36}" | head -1 | grep -oE "[a-f0-9-]{36}" | head -1 || echo "")
-            
-            if [ -n "$LOCK_ID" ]; then
-              echo "Found lock ID: $LOCK_ID. Attempting to force unlock..."
-              terraform force-unlock -force "$LOCK_ID" || echo "Force unlock failed, trying destroy without lock"
-              
-              # Retry destroy
-              echo "Retrying destroy after unlock..."
-              terraform destroy -auto-approve
+            # Check for lock error
+            if grep -q "Error acquiring the state lock" /tmp/destroy.log; then
+              echo "Lock error detected. Attempting to unlock..."
+              LOCK_ID=$(grep -oE "ID:\s+[a-f0-9-]{36}" /tmp/destroy.log | head -1 | grep -oE "[a-f0-9-]{36}" | head -1 || echo "")
+              if [ -n "$LOCK_ID" ]; then
+                echo "Force unlocking: $LOCK_ID"
+                terraform force-unlock -force "$LOCK_ID"
+                echo "Retrying destroy..."
+                terraform destroy -auto-approve
+              fi
+            # Check for resources not found (corrupted state)
+            elif grep -E "empty result|NoSuchEntity|not found|ResourceNotFoundException" /tmp/destroy.log; then
+              echo "Resources not found (corrupted state from partial destruction)"
+              echo "Attempting destroy with refresh to fix state..."
+              terraform destroy -auto-approve -refresh=true
             else
               # Last resort: destroy without lock (safe in destroy workflow)
-              echo "No lock ID found. Destroying without state lock protection..."
+              echo "Unknown error. Attempting destroy without lock..."
               terraform destroy -auto-approve -lock=false
             fi
           else
