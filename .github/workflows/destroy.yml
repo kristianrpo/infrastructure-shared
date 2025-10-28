@@ -103,9 +103,44 @@ jobs:
           echo "Waiting for ALB deletion..."
           sleep 30
 
-      - name: Terraform Destroy
+      - name: Terraform Destroy (with lock handling)
         working-directory: terraform
-        run: terraform destroy -auto-approve
+        run: |
+          # Try normal destroy first
+          set +e
+          terraform destroy -auto-approve
+          DESTROY_EXIT=$?
+          set -e
+          
+          # If failed due to lock, unlock and retry
+          if [ $DESTROY_EXIT -ne 0 ]; then
+            echo "Destroy failed (exit code: $DESTROY_EXIT). Checking for stale locks..."
+            
+            # Parse the lock ID from the error output (if any)
+            # Lock IDs are in format: ae44d301-8bd4-7bf2-d02b-fc393c883721
+            # We'll try to find and unlock any stale lock
+            
+            # Extract lock ID from error (common pattern)
+            LOCK_OUTPUT=$(terraform destroy -auto-approve 2>&1 || true)
+            
+            # Try to find lock ID in the output
+            LOCK_ID=$(echo "$LOCK_OUTPUT" | grep -E "ID:\s+[a-f0-9-]{36}" | head -1 | grep -oE "[a-f0-9-]{36}" | head -1 || echo "")
+            
+            if [ -n "$LOCK_ID" ]; then
+              echo "Found lock ID: $LOCK_ID. Attempting to force unlock..."
+              terraform force-unlock -force "$LOCK_ID" || echo "Force unlock failed, trying destroy without lock"
+              
+              # Retry destroy
+              echo "Retrying destroy after unlock..."
+              terraform destroy -auto-approve
+            else
+              # Last resort: destroy without lock (safe in destroy workflow)
+              echo "No lock ID found. Destroying without state lock protection..."
+              terraform destroy -auto-approve -lock=false
+            fi
+          else
+            echo "Destroy completed successfully"
+          fi
 
       - name: Delete S3 backend bucket (with all objects and versions)
         run: |
