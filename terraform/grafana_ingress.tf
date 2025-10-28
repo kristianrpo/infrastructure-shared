@@ -31,7 +31,7 @@ resource "kubernetes_ingress_v1" "grafana" {
     rule {
       http {
         path {
-          path      = "/*"
+          path      = "/"
           path_type = "Prefix"
           backend {
             service {
