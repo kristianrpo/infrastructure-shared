@@ -87,9 +87,11 @@ module "eks" {
     vpc-cni = {
       most_recent = true
     }
-    ebs-csi-driver = {
-      most_recent = true
-    }
+    # Nota: ebs-csi-driver no está disponible como addon para EKS 1.30
+    # Lo instalamos manualmente via Helm en storage_class.tf
+    # ebs-csi-driver = {
+    #   most_recent = true
+    # }
   }
 
   eks_managed_node_groups = {
