@@ -123,6 +123,22 @@ jobs:
               echo ""
               echo "Continuing pipeline despite timeout..."
               # Don't exit 1, let the pipeline continue
+            elif grep -q "namespaces \"monitoring\" already exists" /tmp/apply.log; then
+              echo "Namespace 'monitoring' already exists. Importing to state..."
+              
+              # Import the existing namespace
+              terraform import kubernetes_namespace.monitoring monitoring || \
+                echo "Namespace may already be in state"
+              
+              # Generate a new plan and apply
+              echo "Generating new plan after namespace import..."
+              terraform plan -out=tfplan-retry-ns
+              
+              echo "Applying with corrected state..."
+              terraform apply -auto-approve tfplan-retry-ns || {
+                echo "Final apply failed"
+                exit 1
+              }
             else
               echo "Apply failed with non-recoverable error"
               cat /tmp/apply.log
