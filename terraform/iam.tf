@@ -307,7 +307,7 @@ module "irsa_external_secrets" {
 }
 
 # ═══════════════════════════════════════════════════════════════
-#  IAM ROLE: EBS CSI DRIVER
+#  IAM ROLE: EBS CSI DRIVER (IRSA)
 # ═══════════════════════════════════════════════════════════════
 resource "aws_iam_role" "ebs_csi_driver" {
   name = "${local.name}-ebs-csi-driver"
@@ -318,9 +318,15 @@ resource "aws_iam_role" "ebs_csi_driver" {
       {
         Effect = "Allow"
         Principal = {
-          Service = "ec2.amazonaws.com"
+          Federated = module.eks.oidc_provider_arn
         }
-        Action = "sts:AssumeRole"
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "${replace(module.eks.oidc_provider_arn, "/^(.*provider/)/", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+            "${replace(module.eks.oidc_provider_arn, "/^(.*provider/)/", "")}:aud" = "sts.amazonaws.com"
+          }
+        }
       }
     ]
   })
@@ -328,6 +334,8 @@ resource "aws_iam_role" "ebs_csi_driver" {
   tags = {
     Name = "${local.name}-ebs-csi-driver-role"
   }
+
+  depends_on = [module.eks]
 }
 
 resource "aws_iam_role_policy" "ebs_csi_driver" {
