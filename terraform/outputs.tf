@@ -99,3 +99,36 @@ output "rabbitmq_consumer_dynamodb_policy_arn" {
   description = "IAM policy ARN for RabbitMQ consumers to access DynamoDB"
   value       = aws_iam_policy.rabbitmq_consumer_dynamodb.arn
 }
+
+# ═══════════════════════════════════════════════════════════════
+#  API GATEWAY
+# ═══════════════════════════════════════════════════════════════
+output "api_gateway_id" {
+  description = "API Gateway HTTP API ID"
+  value       = aws_apigatewayv2_api.microservices_api.id
+}
+
+output "api_gateway_arn" {
+  description = "API Gateway HTTP API ARN"
+  value       = aws_apigatewayv2_api.microservices_api.arn
+}
+
+output "api_gateway_endpoint" {
+  description = "API Gateway HTTP API endpoint URL"
+  value       = aws_apigatewayv2_api.microservices_api.api_endpoint
+}
+
+output "api_gateway_invoke_url" {
+  description = "API Gateway invoke URL (for microservices to use)"
+  value       = "${aws_apigatewayv2_api.microservices_api.api_endpoint}/${var.environment}"
+}
+
+output "api_gateway_vpc_link_id" {
+  description = "VPC Link ID for connecting API Gateway to internal ALBs"
+  value       = aws_apigatewayv2_vpc_link.microservices_vpc_link.id
+}
+
+output "api_gateway_execution_arn" {
+  description = "API Gateway execution ARN (for IAM policies)"
+  value       = aws_apigatewayv2_api.microservices_api.execution_arn
+}
