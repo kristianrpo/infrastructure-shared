@@ -9,6 +9,12 @@
 resource "kubernetes_ingress_v1" "grafana" {
   depends_on = [time_sleep.wait_for_prometheus_stack]
 
+  lifecycle {
+    # Al destruir, forzar que el ALB se elimine antes que la VPC
+    prevent_destroy = false
+    create_before_destroy = true
+  }
+
   metadata {
     name      = "grafana-ingress"
     namespace = kubernetes_namespace.monitoring.metadata[0].name
