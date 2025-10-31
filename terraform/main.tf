@@ -1,22 +1,16 @@
 locals {
   name = "${var.project}-${var.environment}"
-  
+
   azs = [
-    "${var.aws_region}a",
-    "${var.aws_region}b",
-    "${var.aws_region}c"
+    "${var.aws_region}a"
   ]
-  
+
   private_subnets = [
-    cidrsubnet(var.vpc_cidr, 8, 1),
-    cidrsubnet(var.vpc_cidr, 8, 2),
-    cidrsubnet(var.vpc_cidr, 8, 3)
+    cidrsubnet(var.vpc_cidr, 8, 1)
   ]
-  
+
   public_subnets = [
-    cidrsubnet(var.vpc_cidr, 8, 101),
-    cidrsubnet(var.vpc_cidr, 8, 102),
-    cidrsubnet(var.vpc_cidr, 8, 103)
+    cidrsubnet(var.vpc_cidr, 8, 101)
   ]
 }
 
