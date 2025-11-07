@@ -177,7 +177,7 @@ resource "aws_mq_broker" "rabbitmq" {
   auto_minor_version_upgrade = true
   host_instance_type         = var.rabbitmq_instance_type
   publicly_accessible        = false
-  deployment_mode            = "SINGLE_INSTANCE"
+  deployment_mode            = "CLUSTER"
 
   user {
     username = "appuser"
