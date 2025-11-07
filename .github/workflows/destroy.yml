@@ -70,6 +70,15 @@ jobs:
             # Try to remove specific problematic resources first
             terraform state rm 'module.eks.aws_eks_addon.this["ebs-csi-driver"]' 2>/dev/null || echo "Could not remove ebs-csi-driver addon"
             terraform state rm 'module.eks.data.aws_eks_addon_version.this["ebs-csi-driver"]' 2>/dev/null || echo "Could not remove addon version data"
+
+            # Remove Kubernetes/Helm resources that require the cluster
+            terraform state rm 'helm_release.aws_load_balancer_controller' 2>/dev/null || echo "Could not remove aws_load_balancer_controller release"
+            terraform state rm 'helm_release.external_secrets' 2>/dev/null || echo "Could not remove external_secrets release"
+            terraform state rm 'helm_release.kube_prometheus_stack' 2>/dev/null || echo "Could not remove kube_prometheus_stack release"
+            terraform state rm 'helm_release.ebs_csi_driver' 2>/dev/null || echo "Could not remove ebs_csi_driver release"
+            terraform state rm 'kubernetes_namespace.external_secrets' 2>/dev/null || echo "Could not remove external_secrets namespace"
+            terraform state rm 'kubernetes_namespace.monitoring' 2>/dev/null || echo "Could not remove monitoring namespace"
+            terraform state rm 'kubernetes_storage_class_v1.ebs_gp3' 2>/dev/null || echo "Could not remove gp3 storage class"
             
             # If still problems, remove the entire EKS module
             echo "Attempting to remove entire EKS module from state..."
@@ -77,6 +86,34 @@ jobs:
           fi
           
           echo "State cleanup attempted. Proceeding with destroy..."
+
+      - name: Terraform Destroy Kubernetes Addons
+        working-directory: terraform
+        run: |
+          set -e
+          echo "Attempting targeted destroy of Kubernetes addons before tearing down EKS..."
+          if ! aws eks describe-cluster --name citizen-dev --region ${{ secrets.AWS_REGION }} >/dev/null 2>&1; then
+            echo "Cluster not reachable. Skipping targeted destroy of addons."
+            exit 0
+          fi
+
+          set +e
+          terraform destroy -auto-approve \
+            -target=helm_release.aws_load_balancer_controller \
+            -target=helm_release.external_secrets \
+            -target=helm_release.kube_prometheus_stack \
+            -target=helm_release.ebs_csi_driver \
+            -target=kubernetes_namespace.external_secrets \
+            -target=kubernetes_namespace.monitoring \
+            -target=kubernetes_storage_class_v1.ebs_gp3
+          TARGET_EXIT=$?
+          set -e
+
+          if [ $TARGET_EXIT -ne 0 ]; then
+            echo "Targeted destroy of Kubernetes addons failed (exit code: $TARGET_EXIT). Continuing with best effort."
+          else
+            echo "Targeted destroy of Kubernetes addons completed."
+          fi
 
       - name: Get DynamoDB Table Name
         working-directory: terraform

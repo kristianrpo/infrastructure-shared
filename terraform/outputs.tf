@@ -83,6 +83,16 @@ output "eso_irsa_role_name" {
   value       = module.irsa_external_secrets.iam_role_name
 }
 
+output "cluster_autoscaler_irsa_role_arn" {
+  description = "IAM role ARN for Cluster Autoscaler"
+  value       = module.irsa_cluster_autoscaler.iam_role_arn
+}
+
+output "cluster_autoscaler_irsa_role_name" {
+  description = "IAM role NAME for Cluster Autoscaler"
+  value       = module.irsa_cluster_autoscaler.iam_role_name
+}
+
 # DynamoDB
 output "rabbitmq_processed_messages_table_name" {
   description = "DynamoDB table name for RabbitMQ processed messages"

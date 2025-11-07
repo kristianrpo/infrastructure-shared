@@ -189,3 +189,70 @@ resource "time_sleep" "wait_for_prometheus_stack" {
   depends_on      = [helm_release.kube_prometheus_stack]
   create_duration = "60s"
 }
+
+# ═══════════════════════════════════════════════════════════════
+#  CLUSTER AUTOSCALER (Auto-scaling de nodos EKS)
+# ═══════════════════════════════════════════════════════════════
+resource "helm_release" "cluster_autoscaler" {
+  name       = "cluster-autoscaler"
+  repository = "https://kubernetes.github.io/autoscaler"
+  chart      = "cluster-autoscaler"
+  namespace  = "kube-system"
+  version    = "9.29.3"
+
+  set {
+    name  = "autoDiscovery.clusterName"
+    value = module.eks.cluster_name
+  }
+
+  set {
+    name  = "awsRegion"
+    value = var.aws_region
+  }
+
+  set {
+    name  = "rbac.serviceAccount.create"
+    value = "true"
+  }
+
+  set {
+    name  = "rbac.serviceAccount.name"
+    value = "cluster-autoscaler"
+  }
+
+  set {
+    name  = "rbac.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = module.irsa_cluster_autoscaler.iam_role_arn
+  }
+
+  # Configuración de escalado
+  set {
+    name  = "extraArgs.scale-down-enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "extraArgs.scale-down-delay-after-add"
+    value = "10m"
+  }
+
+  set {
+    name  = "extraArgs.scale-down-unneeded-time"
+    value = "10m"
+  }
+
+  set {
+    name  = "extraArgs.skip-nodes-with-system-pods"
+    value = "false"
+  }
+
+  wait          = true
+  wait_for_jobs = true
+  timeout       = 600
+
+  depends_on = [
+    module.irsa_cluster_autoscaler,
+    module.eks,
+    time_sleep.wait_for_alb_controller
+  ]
+}

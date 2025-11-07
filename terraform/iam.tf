@@ -366,3 +366,70 @@ resource "aws_iam_role_policy" "ebs_csi_driver" {
     ]
   })
 }
+
+# ═══════════════════════════════════════════════════════════════
+#  IAM POLICY: CLUSTER AUTOSCALER
+# ═══════════════════════════════════════════════════════════════
+resource "aws_iam_policy" "cluster_autoscaler" {
+  name_prefix = "${local.name}-cluster-autoscaler-"
+  description = "IAM policy for Cluster Autoscaler to manage EKS node groups"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "autoscaling:DescribeAutoScalingGroups",
+          "autoscaling:DescribeAutoScalingInstances",
+          "autoscaling:DescribeLaunchConfigurations",
+          "autoscaling:DescribeScalingActivities",
+          "autoscaling:DescribeTags",
+          "ec2:DescribeInstanceTypes",
+          "ec2:DescribeLaunchTemplateVersions"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "autoscaling:SetDesiredCapacity",
+          "autoscaling:TerminateInstanceInAutoScalingGroup",
+          "ec2:DescribeImages",
+          "ec2:GetInstanceTypesFromInstanceRequirements",
+          "eks:DescribeNodegroup"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${local.name}-cluster-autoscaler-policy"
+  }
+}
+
+# ═══════════════════════════════════════════════════════════════
+#  IRSA: CLUSTER AUTOSCALER
+# ═══════════════════════════════════════════════════════════════
+module "irsa_cluster_autoscaler" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version = "~> 5.39"
+
+  role_name = "${local.name}-cluster-autoscaler"
+
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["kube-system:cluster-autoscaler"]
+    }
+  }
+
+  role_policy_arns = {
+    cluster_autoscaler = aws_iam_policy.cluster_autoscaler.arn
+  }
+
+  tags = {
+    Name = "${local.name}-cluster-autoscaler-role"
+  }
+}
